@@ -41,6 +41,7 @@ class AuditManager:
             match = re.match(pattern, current_file_path.name)
             current_file_index = int(match.group(1))
             new_index = current_file_index + 1
+
             new_name = f"audit_{new_index}.txt"
             new_file = Path(f"./{self._directory_name}/{new_name}")
             new_file.write_text(new_record)
