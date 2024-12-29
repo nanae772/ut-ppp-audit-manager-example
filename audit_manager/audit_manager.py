@@ -3,6 +3,8 @@ import re
 
 
 class AuditManager:
+    """訪問者記録システム"""
+
     def __init__(
         self, max_entries_per_file: int, directory_name: str
     ) -> "AuditManager":
@@ -10,6 +12,7 @@ class AuditManager:
         self._directory_name = directory_name
 
     def add_record(self, visitor_name: str, time_of_visit: str) -> None:
+        """訪問者の名前と訪問時刻をファイルに記録する"""
         path = Path(self._directory_name)
         path.mkdir(exist_ok=True)
         file_paths = sorted(
@@ -19,12 +22,13 @@ class AuditManager:
 
         new_record = f"{visitor_name};{time_of_visit}"
 
+        # ディレクトリが空ならaudit_1.txtを新しく作成し、そこに記録
         if len(file_paths) == 0:
             new_file = Path(f"./{self._directory_name}/audit_1.txt")
             new_file.write_text(new_record)
             return
 
-        current_file_path = file_paths[-1]
+        current_file_path = file_paths[-1]  # 最新のファイルパスを取得
         lines = current_file_path.read_text().splitlines()
 
         if len(lines) < self._max_entries_per_file:
@@ -32,6 +36,7 @@ class AuditManager:
             new_content = "\n".join(lines)
             current_file_path.write_text(new_content)
         else:
+            # 最新のファイルが最大行に達していたなら、新規ファイルを作成しそこに記録
             pattern = r"audit_(\d+)\.txt"
             match = re.match(pattern, current_file_path.name)
             current_file_index = int(match.group(1))
