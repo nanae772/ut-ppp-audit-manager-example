@@ -1,34 +1,24 @@
-from audit_manager.audit_manager import AuditManager
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from audit_manager.audit_manager import AuditManager, IFileSystem
+from unittest.mock import MagicMock
 
 
-@patch("audit_manager.audit_manager.Path")
 class TestAuditManager:
-    max_entries_per_file = 10
+    max_entries_per_file = 3
     directory_name = "audit_logs"
 
     visitor_name = "Bob"
     time_of_visit = "2024-12-28T22:00:00Z"
 
-    def test_create_init_file(self, PathMock):
+    def test_create_init_file(self):
         """ディレクトリが空のとき、audit_1.txtを作成しそこにログを記録"""
         # Arrange
-        path_mock = MagicMock(name="path_mock", spec=Path)
-        path_mock.iterdir.return_value = []  # 空のディレクトリ
-        path_mock.write_text = MagicMock()
-
-        new_file_mock = MagicMock(name="new_file_mock", spec=Path)
-        new_file_mock.write_text = MagicMock()
-
-        PathMock.side_effect = (
-            lambda x: new_file_mock
-            if x == f"./{TestAuditManager.directory_name}/audit_1.txt"
-            else path_mock
-        )
+        file_system_mock = MagicMock(name="file_system_mock", spec=IFileSystem)
+        file_system_mock.get_files.return_value = []  # 空のディレクトリ
 
         sut = AuditManager(
-            TestAuditManager.max_entries_per_file, TestAuditManager.directory_name
+            TestAuditManager.max_entries_per_file,
+            TestAuditManager.directory_name,
+            file_system_mock,
         )
 
         # Act
@@ -36,29 +26,28 @@ class TestAuditManager:
 
         # Assert
         # 新しいファイルにレコードが書き込まれることを確認
-        new_file_mock.write_text.assert_called_once_with(
-            f"{TestAuditManager.visitor_name};{TestAuditManager.time_of_visit}"
+        file_system_mock.write_all_text.assert_called_once_with(
+            f"./{TestAuditManager.directory_name}/audit_1.txt",
+            f"{TestAuditManager.visitor_name};{TestAuditManager.time_of_visit}",
         )
 
-    def test_add_log_to_existing_file(self, PathMock):
+    def test_add_log_to_existing_file(self):
         """
         ディレクトリに既にファイルが存在し、最新ファイルが最大行に達していないなら最新ファイルにログを記録
         """
         # Arrange
-        path_mock = MagicMock(name="path_mock", spec=Path)
+        file_system_mock = MagicMock(name="file_system_mock", spec=IFileSystem)
 
-        audit_file_mock = MagicMock(name="audit_file_mock", spec=Path)
-        audit_file_mock.name = "audit_1.txt"
-        audit_file_mock.is_file.return_value = True
-        audit_file_mock.read_text.return_value = "Alice;2024-12-28T21:00:00Z"
-        audit_file_mock.write_text = MagicMock()
+        existing_file_path = f"./{TestAuditManager.directory_name}/audit_1.txt"
+        file_system_mock.get_files.return_value = [existing_file_path]
 
-        path_mock.iterdir.return_value = [audit_file_mock]
-
-        PathMock.return_value = path_mock
+        existing_file_content = "Alice;2024-12-28T21:00:00Z"
+        file_system_mock.read_all_lines.return_value = [existing_file_content]
 
         sut = AuditManager(
-            TestAuditManager.max_entries_per_file, TestAuditManager.directory_name
+            TestAuditManager.max_entries_per_file,
+            TestAuditManager.directory_name,
+            file_system_mock,
         )
 
         # Act
@@ -66,35 +55,28 @@ class TestAuditManager:
 
         # Assert
         # 既にあるファイルにレコードが書き込まれることを確認
-        audit_file_mock.write_text.assert_called_once_with(
-            f"Alice;2024-12-28T21:00:00Z\n{TestAuditManager.visitor_name};{TestAuditManager.time_of_visit}"
+        file_system_mock.write_all_text.assert_called_once_with(
+            existing_file_path,
+            f"{existing_file_content}\n{TestAuditManager.visitor_name};{TestAuditManager.time_of_visit}",
         )
 
-    def test_create_new_file_when_latest_is_max(self, PathMock):
+    def test_create_new_file_when_latest_is_max(self):
         """最新ファイルが最大行に達しているなら、新規のファイルを作成しそこにログを記録"""
         # Arrange
-        path_mock = MagicMock(name="path_mock", spec=Path)
+        file_system_mock = MagicMock(name="file_system_mock", spec=IFileSystem)
 
-        audit_file_mock = MagicMock(name="audit_file_mock", spec=Path)
-        audit_file_mock.is_file.return_value = True
-        audit_file_mock.name = "audit_1.txt"
-        audit_file_mock.read_text.return_value = "\n".join(
-            ["Alice;2024-12-28T21:00:00Z"] * TestAuditManager.max_entries_per_file
-        )
+        file_system_mock.get_files.return_value = [
+            f"./{TestAuditManager.directory_name}/audit_1.txt"
+        ]
 
-        path_mock.iterdir.return_value = [audit_file_mock]
-
-        new_file_mock = MagicMock(name="new_file_mock", spec=Path)
-        new_file_mock.write_text = MagicMock()
-
-        PathMock.side_effect = (
-            lambda x: new_file_mock
-            if x == f"./{TestAuditManager.directory_name}/audit_2.txt"
-            else path_mock
-        )
+        file_system_mock.read_all_lines.return_value = [
+            "Alice;2024-12-28T21:00:00Z"
+        ] * TestAuditManager.max_entries_per_file
 
         sut = AuditManager(
-            TestAuditManager.max_entries_per_file, TestAuditManager.directory_name
+            TestAuditManager.max_entries_per_file,
+            TestAuditManager.directory_name,
+            file_system_mock,
         )
 
         # Act
@@ -102,6 +84,7 @@ class TestAuditManager:
 
         # Assert
         # 新しいファイルにレコードが書き込まれることを確認
-        new_file_mock.write_text.assert_called_once_with(
-            f"{TestAuditManager.visitor_name};{TestAuditManager.time_of_visit}"
+        file_system_mock.write_all_text.assert_called_once_with(
+            f"./{TestAuditManager.directory_name}/audit_2.txt",
+            f"{TestAuditManager.visitor_name};{TestAuditManager.time_of_visit}",
         )
